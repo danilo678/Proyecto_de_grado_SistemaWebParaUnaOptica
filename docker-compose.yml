@@ -1,0 +1,52 @@
+services:
+  # ---------- Base de datos ----------
+  db:
+    image: postgres:16-alpine
+    container_name: optica_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: "1234"
+      POSTGRES_DB: optica_db
+    ports:
+      - "5433:5432"   # host usa 5433 para no chocar con un PostgreSQL local
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Se ejecutan SOLO en el primer arranque (directorio vacio), en este orden:
+      - ./database/tablas.sql:/docker-entrypoint-initdb.d/01_tablas.sql:ro
+      - ./database/datos.sql:/docker-entrypoint-initdb.d/02_datos.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d optica_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ---------- Backend (NestJS) ----------
+  backend:
+    build: ./backend
+    container_name: optica_backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USERNAME: postgres
+      DB_PASSWORD: "1234"
+      DB_DATABASE: optica_db
+      JWT_SECRET: optica_jwt_secret_key_2025_super_secure
+      JWT_EXPIRES_IN: 24h
+      PORT: 3000
+    ports:
+      - "3000:3000"
+
+  # ---------- Frontend (React + Nginx) ----------
+  frontend:
+    build: ./frontend
+    container_name: optica_frontend
+    depends_on:
+      - backend
+    ports:
+      - "5173:80"
+
+volumes:
+  pgdata:
